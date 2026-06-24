@@ -4,66 +4,45 @@
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 #include <stdbool.h>
-
-
-typedef struct Style
-{
-	char name[32];
-	char parent[32];
-	
-	bool bold;
-	bool italic;
-	bool underline;
-	
-	float fontSize;
-	char fontName[32];
-	char colour[16];
-
-} Style;
-
-typedef struct TextNode
-{
-	char* data;
-	int attr_key;
-	struct TextNode* next;
-
-} TextNode;
-
-typedef struct ParagraphNode
-{
-	TextNode* text;
-	struct Paragraph* next;
-} ParagraphNode;
-
-typedef struct Document
-{
-	ParagraphNode* paragraphs;
-} Document;
-
-void init_text_list(TextNode** first);
-void insert_text_node(TextNode* first, const char* data, int attr_key, int index);
-TextNode* find_text_node(TextNode* first, int index);
-void delete_text_node(TextNode** first, int index);
-void free_text_list(TextNode* first);
-
-void print_text_list(TextNode* first);
-
-// Paragraph
-void init_paragraph_list(ParagraphNode** first);
-void insert_paragraph_node(ParagraphNode* first, ParagraphNode** to_insert, int index);
-ParagraphNode* find_paragraph_node(ParagraphNode* first, int index);
-void delete_paragraph_node(ParagraphNode** first, int index);
-void free_paragraph_list(ParagraphNode* first);
-
-// Styles
-
-// Doc
-void init_document(Document* doc);
-void free_document(Document* doc);
+#include "odt_styles.h"
+#include "jobanote.h"
 
 Document current_doc;
 
 void open_odt(const char* filepath);
+void parse_styles(xmlDocPtr doc, StyleDictionary* dict);
+
+void parse_text_properties(xmlNode* node, Style* style);
+
+void parse_content(xmlDocPtr doc);
+
+void parse_inline_node(xmlNode* node, ParagraphNode* paragraph, Style current_style, int* index);
+
+
+void overlay_style(Style* base, const Style* overlay)
+{
+	if (overlay->hasBold)
+		base->bold = overlay->bold;
+
+	if (overlay->hasItalic)
+		base->italic = overlay->italic;
+
+	if (overlay->hasUnderline)
+		base->underline = overlay->underline;
+
+	if (overlay->hasStrike)
+		base->strikethrough = overlay->strikethrough;
+
+	if (overlay->hasFontSize)
+		base->fontSize = overlay->fontSize;
+
+	if (overlay->hasFontName)
+		strcpy(base->font_name, overlay->font_name);
+
+	if (overlay->hasColour)
+		strcpy(base->colour, overlay->colour);
+}
+
 
 int main(void)
 {
@@ -71,21 +50,290 @@ int main(void)
 	init_document(&current_doc);
 
 	open_odt("resources/documents/test.odt");
+
 	free_document(&current_doc);
 	return 0;
 }
 
-void init_document(Document* doc)
+void parse_styles(xmlDocPtr doc, StyleDictionary* dict)
 {
-	doc->paragraphs = NULL;
-	init_paragraph_list(&doc->paragraphs);
+	xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
+
+	xmlXPathRegisterNs(ctx, BAD_CAST "office", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:office:1.0");
+	xmlXPathRegisterNs(ctx, BAD_CAST "style", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:style:1.0");
+	xmlXPathRegisterNs(ctx, BAD_CAST "fo", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0");
+
+	// Default Styles
+
+	xmlXPathObjectPtr defaults = xmlXPathEvalExpression(BAD_CAST "//style:default-style[@style:family='paragraph']", ctx);
+
+	if (defaults && defaults->nodesetval)
+	{
+		for (int i = 0; i < defaults->nodesetval->nodeNr; i++)
+		{
+			xmlNode* node = defaults->nodesetval->nodeTab[i];
+
+			Style style;
+			init_style(&style);
+			strcpy(style.name, "default-style");
+
+			for (xmlNode* child = node->children; child; child = child->next)
+			{
+				if (child->type != XML_ELEMENT_NODE)
+					continue;
+
+				if (xmlStrcmp(child->name, BAD_CAST "text-properties") == 0)
+				{
+					parse_text_properties(child, &style);
+				}
+
+
+			}
+
+		
+			dict->default_paragraph = style;
+
+			printf("Found default style: %s\n", style.name);
+		}
+	}
+
+	if (defaults)
+		xmlXPathFreeObject(defaults);
+
+
+
+	// Normal styles
+
+	xmlXPathObjectPtr result = xmlXPathEvalExpression(BAD_CAST "//style:style", ctx);
+
+	if (result && result->nodesetval)
+	{
+		int count = result->nodesetval->nodeNr;
+
+		for (int i = 0; i < count; i++)
+		{
+			xmlNode* node = result->nodesetval->nodeTab[i];
+
+			Style style;
+			init_style(&style);
+
+			xmlChar* name = xmlGetProp(node, BAD_CAST "name");
+
+			xmlChar* parent = xmlGetProp(node, BAD_CAST "parent-style-name");
+
+			if (name)
+			{
+				strncpy(style.name, (char*)name, sizeof(style.name) - 1);
+				style.name[sizeof(style.name) - 1] = '\0';
+				xmlFree(name);
+			}
+
+			if (parent)
+			{
+				strncpy(style.parent, (char*)parent, sizeof(style.parent) - 1);
+				style.parent[sizeof(style.parent) - 1] = '\0';
+				xmlFree(parent);
+			}
+
+			for (xmlNode* child = node->children; child; child = child->next)
+			{
+				if (child->type != XML_ELEMENT_NODE)
+					continue;
+
+				if (xmlStrcmp(child->name, BAD_CAST "text-properties") == 0)
+				{
+					parse_text_properties(child, &style);
+				}
+			}
+
+			insert_style(&style, dict, style.name);
+			printf("Found style: %s\n", style.name);
+		}
+	}
+
+	if (result)
+		xmlXPathFreeObject(result);
+
+	xmlXPathFreeContext(ctx);
+
 }
 
-void free_document(Document* doc)
+void parse_text_properties(xmlNode* node, Style* style)
 {
-	free_paragraph_list(doc->paragraphs);
+	xmlChar* weight = xmlGetProp(node, BAD_CAST "font-weight");
+	xmlChar* italic = xmlGetProp(node, BAD_CAST "font-style");
+	xmlChar* underline = xmlGetProp(node, BAD_CAST "text-underline-style");
+	xmlChar* strike = xmlGetProp(node, BAD_CAST "text-line-through-style");
+	xmlChar* size = xmlGetProp(node, BAD_CAST "font-size");
+	xmlChar* font = xmlGetProp(node, BAD_CAST "font-name");
+	xmlChar* colour = xmlGetProp(node, BAD_CAST "color");
+
+	if (weight)
+	{
+		style->bold = xmlStrcmp(weight, BAD_CAST "bold") == 0;
+		style->hasBold = true;
+	}
+
+	if (italic)
+	{
+		style->italic = xmlStrcmp(italic, BAD_CAST "italic") == 0;
+		style->hasItalic = true;
+	}
+
+	if (size)
+	{
+		style->fontSize = (float)atof((char*)size);
+		style->hasFontSize = true;
+	}
+
+	if (font)
+	{
+		strncpy(style->font_name, (char*)font, sizeof(style->font_name) - 1);
+		style->font_name[sizeof(style->font_name) - 1] = '\0';
+		style->hasFontName = true;
+	}
+
+	if (colour)
+	{
+		strncpy(style->colour, (char*)colour, sizeof(style->colour) - 1);
+		style->colour[sizeof(style->colour) - 1] = '\0';
+		style->hasColour = true;
+	}
+
+	xmlFree(weight);
+	xmlFree(italic);
+	xmlFree(underline);
+	xmlFree(strike);
+	xmlFree(size);
+	xmlFree(font);
+	xmlFree(colour);
 }
 
+void parse_inline_node(xmlNode* node, ParagraphNode* paragraph, Style current_style, int* index)
+{
+
+	for (xmlNode* child = node; child; child = child->next)
+	{
+		
+		// Plain text
+		
+		if (child->type == XML_TEXT_NODE)
+		{
+			xmlChar* value = xmlNodeGetContent(child);
+
+			if (value && xmlStrlen(value) > 0)
+			{
+
+				insert_text_node(paragraph->text, (char*)value, &current_style, (*index)++);
+
+				xmlFree(value);
+			}
+		}
+
+
+		// Span
+		
+		else if (child->type == XML_ELEMENT_NODE && xmlStrEqual(child->name, BAD_CAST "span"))
+		{
+			Style span_style = current_style;
+
+			xmlChar* style_name = xmlGetNsProp(child, BAD_CAST "style-name", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:text:1.0");
+
+			if (style_name)
+			{
+				Style resolved = resolve_style((char*)style_name, &current_doc.dictionary);
+				printf("span style = %s\n", style_name);
+				
+				//Overlay span style on current style
+				overlay_style(&span_style, &resolved);
+				xmlFree(style_name);
+			}
+
+			parse_inline_node(child->children, paragraph, span_style, index); // recursive
+		}
+		// space
+		else if (child->type == XML_ELEMENT_NODE && xmlStrEqual(child->name, BAD_CAST "s"))
+		{
+			int count = 1;
+
+			xmlChar* c = xmlGetProp(child, BAD_CAST "c");
+
+			if (c)
+			{
+				count = atoi((char*)c);
+				xmlFree(c);
+			}
+
+			char spaces[256];
+
+			memset(spaces, ' ', count);
+			spaces[count] = '\0';
+
+			insert_text_node(paragraph->text, spaces,&current_style,(*index)++);
+		}
+		// tab
+		else if (child->type == XML_ELEMENT_NODE && xmlStrEqual(child->name, BAD_CAST "tab"))
+		{
+			insert_text_node(paragraph->text,"\t",&current_style, (*index)++);
+		}
+		// line break
+		else if (child->type == XML_ELEMENT_NODE && xmlStrEqual(child->name, BAD_CAST "line-break"))
+		{
+			insert_text_node(paragraph->text,"\n", &current_style, (*index)++);
+		}
+	}
+}
+
+
+
+void parse_content(xmlDocPtr doc)
+{
+	xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
+	xmlXPathRegisterNs(ctx, BAD_CAST "office", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:office:1.0");
+	xmlXPathRegisterNs(ctx, BAD_CAST "text", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:text:1.0");
+
+	xmlXPathObjectPtr result = xmlXPathEvalExpression(BAD_CAST "//text:p", ctx);
+
+	if (result && result->nodesetval)
+	{
+		// loop each text:p node
+		int count = result->nodesetval->nodeNr;
+		for (int i = 0; i < count; i++)
+		{
+			ParagraphNode* paragraph_node = (ParagraphNode*)malloc(sizeof(ParagraphNode));
+			paragraph_node->text = NULL;
+			init_text_list(&paragraph_node->text);
+			paragraph_node->next = NULL;
+
+			xmlNode* node = result->nodesetval->nodeTab[i];
+
+			Style paragraph_style;
+			init_style(&paragraph_style);
+
+			xmlChar* style_name = xmlGetNsProp(node, BAD_CAST "style-name", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:text:1.0");
+
+			if (style_name)
+			{
+				printf("STYLE = %s\n", (char*)style_name);
+				paragraph_style = resolve_style((char*)style_name, &current_doc.dictionary);
+				xmlFree(style_name);
+			}
+
+			int text_index = 0;
+			parse_inline_node(node->children, paragraph_node, paragraph_style, &text_index);
+
+			insert_paragraph_node(current_doc.paragraphs, &paragraph_node, i);
+
+			print_text_list(paragraph_node->text);
+
+		}
+
+	}
+
+	if (result)
+		xmlXPathFreeObject(result);
+	xmlXPathFreeContext(ctx);
+}
 
 void open_odt(const char* filepath)
 {
@@ -100,239 +348,68 @@ void open_odt(const char* filepath)
 		return;
 	}
 
-	size_t size;
-	void* data = mz_zip_reader_extract_file_to_heap(&odt, "content.xml", &size, 0);
+	xmlDocPtr content_doc = NULL;
+	xmlDocPtr styles_doc = NULL;
 
-	if (data)
+	// Load content.xml
+	size_t content_size;
+	void* content_data = mz_zip_reader_extract_file_to_heap(&odt, "content.xml", &content_size, 0);
+
+	if (content_data)
 	{
-		xmlDocPtr contentDoc = xmlReadMemory(data, (int)size, "content.xml", NULL, 0);
+		content_doc = xmlReadMemory(content_data, (int)content_size, "content.xml", NULL, 0);
+		mz_free(content_data);
 
-		if (!contentDoc)
+		if (!content_doc)
 		{
 			fprintf(stderr, "Parse failed\n");
-			mz_free(data);
+			mz_zip_reader_end(&odt);
+			return;
 		}
 
-		// Use data
-
-		xmlXPathContextPtr ctx = xmlXPathNewContext(contentDoc);
-		xmlXPathRegisterNs(ctx, BAD_CAST "office", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:office:1.0");
-		xmlXPathRegisterNs(ctx, BAD_CAST "text", BAD_CAST "urn:oasis:names:tc:opendocument:xmlns:text:1.0");
-		xmlXPathObjectPtr result = xmlXPathEvalExpression(BAD_CAST "//text:p", ctx);
-
-		if (result && result->nodesetval)
-		{
-			// loop each text:p node
-			int count = result->nodesetval->nodeNr;
-			for (int i = 0; i < count; i++)
-			{
-				ParagraphNode* paragraph_node = (ParagraphNode*)malloc(sizeof(ParagraphNode));
-				paragraph_node->text = NULL;
-				init_text_list(&paragraph_node->text);
-				paragraph_node->next = NULL;
-
-				xmlNode* node = result->nodesetval->nodeTab[i];
-
-				int paragraph_child_index = 0;
-				for (xmlNode* child = node->children; child != NULL; child = child->next)
-				{
-					xmlChar* value = xmlNodeGetContent(child);
-					//printf("%s = %s\n", (char*)child->name, value);
-
-					insert_text_node(paragraph_node->text, (char*)value, 0, paragraph_child_index);
-					paragraph_child_index++;
-
-					xmlFree(value);
-					
-				}
-
-
-				
-				print_text_list(paragraph_node->text);
-
-				insert_paragraph_node(current_doc.paragraphs, &paragraph_node, i);
-
-			}
-
-		}
-
-		xmlXPathFreeObject(result);
-		xmlXPathFreeContext(ctx);
-	
-
-		xmlFreeDoc(contentDoc);
-		xmlCleanupParser();
-		mz_free(data);
 	}
-	
+
+	// Load styles.xml
+	size_t styles_size;
+	void* styles_data = mz_zip_reader_extract_file_to_heap(&odt, "styles.xml", &styles_size, 0);
+
+	if (styles_data)
+	{
+		styles_doc = xmlReadMemory(styles_data, (int)styles_size, "styles.xml", NULL, 0);
+
+		mz_free(styles_data);
+
+		if (!styles_doc)
+		{
+			fprintf(stderr, "Failed to parse styles.xml\n");
+			mz_zip_reader_end(&odt);
+			return;
+		}
+	}
+
+	// Parse 
+
+	if (styles_doc)
+	{
+		parse_styles(styles_doc, &current_doc.dictionary);
+	}
+
+	if (content_doc)
+	{
+		parse_styles(content_doc, &current_doc.dictionary);
+		parse_content(content_doc);
+	}
+
+	print_style_dictionary(&current_doc.dictionary);
+
+	// Cleanup
+
+	if (content_doc)
+		xmlFreeDoc(content_doc);
+
+	if (styles_doc)
+		xmlFreeDoc(styles_doc);
+
+	xmlCleanupParser();
 	mz_zip_reader_end(&odt);
 }
-
-
-
-
-
-
-// Lists
-//  text
-
-void print_text_list(TextNode* first)
-{
-	TextNode* temp = first;
-
-	while (temp != NULL)
-	{
-		TextNode* next = temp->next;
-		printf("%s\n", temp->data);
-		temp = next;
-	}
-	printf("======================\n");
-}
-
-void init_text_list(TextNode** first)
-{
-	*first = malloc(sizeof(TextNode));
-
-	if (!*first)
-	{
-		printf("Linked list allocation failed\n");
-		return;
-	}
-	
-	(*first)->data = NULL;
-	(*first)->attr_key = 0;
-	(*first)->next = NULL;
-}
-
-void insert_text_node(TextNode* first, const char* data, int attr_key, int index)
-{
-	TextNode* new_node = (TextNode*)malloc(sizeof(TextNode));
-
-	if (!new_node)
-	{
-		printf("Linked list allocation failed\n");
-		return;
-	}
-
-	new_node->attr_key = attr_key;
-	new_node->data = strdup(data);
-	new_node->next = NULL;
-
-	TextNode* temp = first;
-	int counter = 0;
-
-	while (temp->next != NULL && counter < index)
-	{
-		temp = temp->next;
-		counter++;
-	}
-
-	new_node->next = temp->next;
-	temp->next = new_node;
-}
-
-TextNode* find_text_node(TextNode* first, int index)
-{
-	TextNode* temp = first;
-
-	for (int i = 0; temp && i < index; i++)
-		temp = temp->next;
-
-	return temp;
-}
-
-void delete_text_node(TextNode** first, int index)
-{
-	if (!first || !*first)
-		return;
-
-	TextNode* temp = *first;
-
-	if (index == 0)
-	{
-		*first = temp->next;
-		free(temp);
-
-		return;
-	}
-
-	for (int i = 0; temp && i < index - 1; i++)
-		temp = temp->next;
-
-	if (!temp || !temp->next)
-		return;
-
-	TextNode* target = temp->next;
-
-	temp->next = target->next;
-	free(target->data);
-	free(target);
-}
-
-void free_text_list(TextNode* first)
-{
-	TextNode* temp = first;
-
-	while (temp != NULL)
-	{
-		TextNode* next = temp->next;
-		free(temp->data);
-		free(temp);
-		temp = next;
-	}
-}
-
-void init_paragraph_list(ParagraphNode** first)
-{
-	*first = malloc(sizeof(ParagraphNode));
-
-	if (!*first)
-	{
-		printf("Linked list allocation failed\n");
-		return;
-	}
-
-	(*first)->text = NULL;
-	init_text_list(&(*first)->text);
-	(*first)->next = NULL;
-}
-
-void insert_paragraph_node(ParagraphNode* first, ParagraphNode** to_insert, int index)
-{
-	ParagraphNode* temp = first;
-	int counter = 0;
-
-	while (temp->next != NULL && counter < index)
-	{
-		temp = temp->next;
-		counter++;
-	}
-
-	(*to_insert)->next = temp->next;
-	temp->next = *to_insert;
-
-
-}
-
-ParagraphNode* find_paragraph_node(ParagraphNode* first, int index)
-{
-	return NULL;
-}
-
-void delete_paragraph_node(ParagraphNode** first, int index)
-{
-}
-
-void free_paragraph_list(ParagraphNode* first)
-{
-	ParagraphNode* temp = first;
-
-	while (temp != NULL)
-	{
-		ParagraphNode* next = temp->next;
-		free_text_list(temp->text);
-		free(temp);
-		temp = next;
-	}
-}
-

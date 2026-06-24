@@ -8,7 +8,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 add_executable(${PROJECT_NAME}
     "src/main.c"
     src/jbgl.c
-)
+ "src/odt_styles.h" "src/jobanote.h")
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE
@@ -67,7 +67,7 @@ target_include_directories(nfd PUBLIC
     vendor/nativefiledialog/src/include
 )
 
-add_library(miniz vendor/miniz/miniz.c)
+add_library(miniz vendor/miniz/miniz.c )
 
 target_include_directories(miniz PUBLIC
     vendor/miniz
