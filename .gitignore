@@ -7,9 +7,9 @@
 build/
 out/
 
-jbgl.c
-jbgl.h
-jbgl_main.c
+#jbgl.c
+#jbgl.h
+#jbgl_main.c
 
 # User-specific files
 *.rsuser

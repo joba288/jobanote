@@ -1,6 +1,16 @@
 ﻿#ifndef JOBANOTE_H
 #define JOBANOTE_H
 
+#include "miniz.h"
+#include <stdlib.h>
+#include "libxml/parser.h"
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
+#include <stdbool.h>
+#include "odt_styles.h"
+
+
+
 typedef struct TextNode
 {
 	char* data;
@@ -42,14 +52,14 @@ void free_document(Document* doc);
 
 
 
-void init_document(Document* doc)
+inline void init_document(Document* doc)
 {
 	doc->paragraphs = NULL;
 	init_paragraph_list(&doc->paragraphs);
 	init_style_dictionary(&doc->dictionary);
 }
 
-void free_document(Document* doc)
+inline void free_document(Document* doc)
 {
 	free_paragraph_list(doc->paragraphs);
 	free_style_dictionary(&doc->dictionary);
@@ -65,7 +75,7 @@ void free_document(Document* doc)
 // Lists
 //  text
 
-void print_text_list(TextNode* first)
+inline void print_text_list(TextNode* first)
 {
 
 	TextNode* temp = first;
@@ -82,7 +92,7 @@ void print_text_list(TextNode* first)
 	printf("\n======================\n");
 }
 
-void init_text_list(TextNode** first)
+inline void init_text_list(TextNode** first)
 {
 	*first = malloc(sizeof(TextNode));
 
@@ -104,7 +114,7 @@ void init_text_list(TextNode** first)
 	(*first)->next = NULL;
 }
 
-void insert_text_node(TextNode* first, const char* data, Style* resolved_style, int index)
+inline void insert_text_node(TextNode* first, const char* data, Style* resolved_style, int index)
 {
 	TextNode* new_node = (TextNode*)malloc(sizeof(TextNode));
 
@@ -146,7 +156,7 @@ void insert_text_node(TextNode* first, const char* data, Style* resolved_style, 
 	temp->next = new_node;
 }
 
-TextNode* find_text_node(TextNode* first, int index)
+inline TextNode* find_text_node(TextNode* first, int index)
 {
 	TextNode* temp = first;
 
@@ -156,7 +166,7 @@ TextNode* find_text_node(TextNode* first, int index)
 	return temp;
 }
 
-void delete_text_node(TextNode** first, int index)
+inline void delete_text_node(TextNode** first, int index)
 {
 	if (!first || !*first)
 		return;
@@ -186,7 +196,7 @@ void delete_text_node(TextNode** first, int index)
 	free(target);
 }
 
-void free_text_list(TextNode* first)
+inline void free_text_list(TextNode* first)
 {
 	TextNode* temp = first;
 
@@ -200,7 +210,7 @@ void free_text_list(TextNode* first)
 	}
 }
 
-void init_paragraph_list(ParagraphNode** first)
+inline void init_paragraph_list(ParagraphNode** first)
 {
 	*first = malloc(sizeof(ParagraphNode));
 
@@ -215,7 +225,7 @@ void init_paragraph_list(ParagraphNode** first)
 	(*first)->next = NULL;
 }
 
-void insert_paragraph_node(ParagraphNode* first, ParagraphNode** to_insert, int index)
+inline void insert_paragraph_node(ParagraphNode* first, ParagraphNode** to_insert, int index)
 {
 	ParagraphNode* temp = first;
 	int counter = 0;
@@ -232,16 +242,16 @@ void insert_paragraph_node(ParagraphNode* first, ParagraphNode** to_insert, int 
 
 }
 
-ParagraphNode* find_paragraph_node(ParagraphNode* first, int index)
+inline ParagraphNode* find_paragraph_node(ParagraphNode* first, int index)
 {
 	return NULL;
 }
 
-void delete_paragraph_node(ParagraphNode** first, int index)
+inline void delete_paragraph_node(ParagraphNode** first, int index)
 {
 }
 
-void free_paragraph_list(ParagraphNode* first)
+inline void free_paragraph_list(ParagraphNode* first)
 {
 	ParagraphNode* temp = first;
 
@@ -254,5 +264,43 @@ void free_paragraph_list(ParagraphNode* first)
 	}
 }
 
+//--------------------------------------------------------------------
+
+void open_odt(const char* filepath);
+void parse_styles(xmlDocPtr doc, StyleDictionary* dict);
+void parse_text_properties(xmlNode* node, Style* style);
+void parse_content(xmlDocPtr doc);
+void parse_inline_node(xmlNode* node, ParagraphNode* paragraph, Style current_style, int* index);
+
+
+inline void overlay_style(Style* base, const Style* overlay)
+{
+	if (overlay->hasBold)
+		base->bold = overlay->bold;
+
+	if (overlay->hasItalic)
+		base->italic = overlay->italic;
+
+	if (overlay->hasUnderline)
+		base->underline = overlay->underline;
+
+	if (overlay->hasStrike)
+		base->strikethrough = overlay->strikethrough;
+
+	if (overlay->hasFontSize)
+		base->fontSize = overlay->fontSize;
+
+	if (overlay->hasFontName)
+		strcpy(base->font_name, overlay->font_name);
+
+	if (overlay->hasColour)
+		strcpy(base->colour, overlay->colour);
+}
+
+
+
+// exporting to odt
+void export_odt(Document* doc, const char* filepath);
+void run_program();
 
 #endif

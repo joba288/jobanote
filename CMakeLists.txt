@@ -6,9 +6,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 add_executable(${PROJECT_NAME}
-    "src/main.c"
+"src/main.c"
+    "src/jobanote.c"
     src/jbgl.c
- "src/odt_styles.h" "src/jobanote.h")
+ )
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE

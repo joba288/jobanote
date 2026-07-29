@@ -50,7 +50,7 @@ bool style_cmp(const Style* a, const Style* b);
 Style resolve_style(const char* name, StyleDictionary* dict);
 
 
-Style resolve_style(const char* name, StyleDictionary* dictionary)
+inline Style resolve_style(const char* name, StyleDictionary* dictionary)
 {
 	// resolve styles on use of a style
 
@@ -115,7 +115,7 @@ Style resolve_style(const char* name, StyleDictionary* dictionary)
 }
 
 // Styles
-void init_style_dictionary(StyleDictionary* dictionary)
+inline void init_style_dictionary(StyleDictionary* dictionary)
 {
 	dictionary->size = 0;
 	dictionary->capacity = 4;
@@ -128,7 +128,7 @@ void init_style_dictionary(StyleDictionary* dictionary)
 	}
 }
 
-void free_style_dictionary(StyleDictionary* dictionary)
+inline void free_style_dictionary(StyleDictionary* dictionary)
 {
 	free(dictionary->dict);
 	dictionary->dict = NULL;
@@ -136,7 +136,7 @@ void free_style_dictionary(StyleDictionary* dictionary)
 	dictionary->capacity = 0;
 }
 
-void insert_style(Style* style, StyleDictionary* dictionary, char out[32])
+inline void insert_style(Style* style, StyleDictionary* dictionary, char out[32])
 {
 	//resize array
 
@@ -169,7 +169,7 @@ void insert_style(Style* style, StyleDictionary* dictionary, char out[32])
 
 	dictionary->dict[dictionary->size++] = *style;
 }
-Style* find_style(char name[32], StyleDictionary* dictionary)
+inline Style* find_style(char name[32], StyleDictionary* dictionary)
 {
 	if (!dictionary || !name)
 		return NULL;
@@ -186,11 +186,11 @@ Style* find_style(char name[32], StyleDictionary* dictionary)
 
 
 
-Style* index_style(int index, StyleDictionary* dictionary) {}
-void delete_style(char name[32], StyleDictionary* dictionary) {}
+inline Style* index_style(int index, StyleDictionary* dictionary) {}
+inline void delete_style(char name[32], StyleDictionary* dictionary) {}
 
 
-void init_style(Style* style)
+inline void init_style(Style* style)
 {
 	memset(style, 0, sizeof(Style));
 	strcpy(style->name, "NULL");
@@ -212,7 +212,7 @@ void init_style(Style* style)
 	style->hasFontName = false;
 	style->hasColour = false;
 }
-void print_style(const Style* style)
+inline void print_style(const Style* style)
 {
 	if (!style)
 		return;
@@ -228,7 +228,7 @@ void print_style(const Style* style)
 	printf("  Colour       : %s\n", style->colour);
 	printf("\n");
 }
-void print_style_dictionary(const StyleDictionary* dictionary)
+inline void print_style_dictionary(const StyleDictionary* dictionary)
 {
 	if (!dictionary)
 		return;
@@ -247,7 +247,7 @@ void print_style_dictionary(const StyleDictionary* dictionary)
 
 	printf("========================================\n");
 }
-bool style_cmp(const Style* a, const Style* b)
+inline bool style_cmp(const Style* a, const Style* b)
 {
 	if (!a || !b)
 		return 0;
