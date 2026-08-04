@@ -1,6 +1,11 @@
 ﻿#pragma once
 #include <glad/gl.h>
 #include <cglm/cglm.h>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H  
+
+
 #define JBGL_2D_DEPTH 0
 #define MAX_VERTS 10000
 #define JBGL_MAX_BATCH_INSTANCES 200
@@ -35,6 +40,9 @@ extern "C"
 		vec2 size;
 		vec4 colour;
 		int tex_index;
+		vec2 uv0;
+		vec2 uv1;
+
 
 	} JbglRectInstance;
 
@@ -54,6 +62,10 @@ extern "C"
 
 		int screen_w;
 		int screen_h;
+
+		FT_Library ft;
+
+		
 	} JbglState;
 
 
@@ -62,6 +74,50 @@ extern "C"
 		float w, h;
 		vec2 centre;
 	} JbglRectangle;
+
+
+
+
+	typedef struct JbglGlyph
+	{
+		vec2 size; // size of glyph
+		vec2 bearing; // offset from baseline to left
+		GLuint advance; // offset advance of next glyph
+		int codepoint;
+
+
+		vec2 uv0; // UV location of place in atlas (top left)
+		vec2 uv1; // UV location of place in atlas (bottom right)
+	} JbglGlyph;
+
+	typedef struct JbglGlyphCache
+	{
+		JbglGlyph* cache;
+		GLuint count;
+		int capacity;
+	} JbglGlyphCache;
+
+	typedef struct JbglFont
+	{
+		GLuint atlas_id;
+		int atlas_w;
+		int atlas_h;
+
+		int atlas_x;
+		int atlas_y;
+
+		int atlas_row_h;
+
+		FT_Face face;
+
+		JbglGlyphCache glyph_cache;
+
+	} JbglFont;
+
+
+	void jbgl_cache_glyph(JbglState* state, JbglFont* font, JbglGlyph glyph);
+	JbglGlyph jbgl_get_glyph_from_cache(JbglState* state, JbglFont* font, int codepoint);
+
 
 
 	void jbgl_init_batch_renderer(JbglState* state);
@@ -80,6 +136,20 @@ extern "C"
 	JbglRectInstance* jbgl_add_rect_instance(JbglState* state, JbglRectangle rect, uint8_t tex_index);
 
 	void jbgl_destroy_texture(JbglTexture* tex);
+
+
+	// Fonts:
+
+	JbglFont* jbgl_load_font(JbglState* state, const char* filepath, int size);
+	void jbgl_draw_text(JbglState* state, const char* text, vec2 pos, JbglFont* font);
+
+	JbglGlyph jbgl_find_glyph(JbglFont* font, int index);
+
+	void jbgl_render_glyph(JbglState* state, JbglFont* font, JbglGlyph* glyph, vec2 pos);
+
+	void jbgl_free_font(JbglFont* font);
+
+
 
 	// Shaders ---------------------------------------------------------------------
 	JbglShader jbgl_init_shader(const char* vs_source, const char* fs_source);

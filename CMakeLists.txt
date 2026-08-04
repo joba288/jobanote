@@ -85,10 +85,17 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(libxml2)
 
+FetchContent_Declare(
+    freetype
+    GIT_REPOSITORY https://gitlab.freedesktop.org/freetype/freetype.git
+    GIT_TAG VER-2-13-3
+)
 
+FetchContent_MakeAvailable(freetype)
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
+    freetype
     cglm_headers
     nfd
     glfw

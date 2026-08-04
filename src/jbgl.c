@@ -106,9 +106,20 @@ void jbgl_init_batch_renderer(JbglState* state)
 	glVertexAttribPointer(5, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(JbglRectInstance), (void*)offsetof(JbglRectInstance, tex_index));
 	glEnableVertexAttribArray(5);
 	glVertexAttribDivisor(5, 1);
+	// UV0 (texture atlasing fonts)
+	glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, sizeof(JbglRectInstance),(void*)offsetof(JbglRectInstance, uv0));
+	glEnableVertexAttribArray(6);
+	glVertexAttribDivisor(6, 1);
+	// UV1
+	glVertexAttribPointer(7, 2, GL_FLOAT, GL_FALSE,sizeof(JbglRectInstance),(void*)offsetof(JbglRectInstance, uv1));
+	glEnableVertexAttribArray(7);
+	glVertexAttribDivisor(7, 1);
+
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
+
+
 
 	// Create texture slots
 	int tex_slots[JBGL_MAX_BATCH_TEXTURES];
@@ -199,6 +210,355 @@ void jbgl_draw_texture(JbglState* state, JbglTexture tex, vec3 pos, int w, int h
 	jbgl_add_rect_instance(state, rect, tex_index);
 }
 
+
+void jbgl_free_font(JbglFont* font)
+{
+	if (font->atlas_id != 0)
+	{
+		glDeleteTextures(1, &font->atlas_id);
+	}
+
+	FT_Done_Face(font->face);
+	
+	free(font->glyph_cache.cache);
+	free(font);
+}
+
+void jbgl_cache_glyph(JbglState* state, JbglFont* font, JbglGlyph glyph)
+{
+	
+	JbglGlyphCache* cache = &font->glyph_cache;
+	
+	if (cache->count + 1 > cache->capacity)
+	{
+		cache->capacity = cache->capacity * 2;
+		JbglGlyph* new_cache = (JbglGlyph*)malloc(sizeof(JbglGlyph) * cache->capacity);
+		memcpy(new_cache, cache->cache, cache->count * sizeof(JbglGlyph));
+		free(font->glyph_cache.cache);
+		font->glyph_cache.cache = new_cache;
+	}
+
+	cache->cache[cache->count] = glyph;
+	cache->count++;
+}
+
+
+JbglGlyph jbgl_get_glyph_from_cache(JbglState* state, JbglFont* font, int codepoint)
+{
+	// Search for glyph in cache
+	
+	JbglGlyphCache* cache = &font->glyph_cache;
+	
+	for (int i = 0; i < cache->count; i++)
+	{
+		if (codepoint == cache->cache[i].codepoint)
+		{
+			return cache->cache[i];
+		}
+	}
+	// If unpresent, generate, add to cache and return.
+	JbglGlyph new_glyph = jbgl_find_glyph(font, codepoint);
+	jbgl_cache_glyph(state, font, new_glyph);
+
+	return new_glyph;
+}
+
+
+JbglFont* jbgl_load_font(JbglState* state, const char* filepath, int size)
+{
+	JbglFont* font = malloc(sizeof(JbglFont));
+	
+	if (FT_New_Face(state->ft, filepath, 0, &font->face))
+	{
+		printf("ERROR::FREETYPE: Failed to load font\n");
+		free(font);
+		return;
+	}
+
+	// todo sort this out
+	if (FT_Set_Charmap(font->face, FT_ENCODING_UNICODE))
+	{
+		for (int i = 0; i < font->face->num_charmaps; i++) {
+			if (font->face->charmaps[i]->encoding == FT_ENCODING_UNICODE) {
+				FT_Set_Charmap(font->face, font->face->charmaps[i]);
+				break;
+			}
+		}
+	}
+
+	FT_Set_Pixel_Sizes(font->face, 0, size);
+
+	font->atlas_w = 1024;
+	font->atlas_h = 1024;
+	font->atlas_row_h = 0;
+	font->atlas_x = 0;
+	font->atlas_y = 0;
+	font->glyph_cache.capacity = 4;
+	font->glyph_cache.count = 0;
+	font->glyph_cache.cache = (JbglGlyph*)malloc(sizeof(JbglGlyph) * font->glyph_cache.capacity);
+
+
+
+	// Create texture atlas
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glGenTextures(1, &(font->atlas_id));
+	glBindTexture(GL_TEXTURE_2D, font->atlas_id);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	
+	// Texture will get Sub-imaged in later
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, font->atlas_w, font->atlas_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	
+
+
+
+
+
+	return font;
+}
+
+JbglGlyph jbgl_find_glyph(JbglFont* font, int index)
+{
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	JbglGlyph glyph = {0};
+	// load glyph into font's glyph slot
+	if (FT_Load_Glyph(font->face, index, FT_LOAD_RENDER))
+	{
+		printf("ERROR::FREETYTPE: Failed to load Glyph");
+		return glyph;
+	}
+
+	// Load and rasterise
+	FT_GlyphSlot glyph_slot = font->face->glyph;
+	int w = glyph_slot->bitmap.width;
+	int h = glyph_slot->bitmap.rows;
+
+	unsigned char* texture_data = (unsigned char*)malloc(w * h * 4);
+	if (texture_data == NULL)
+	{
+		fprintf(stderr, "Memory allocatio failed\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	memset(texture_data, 0, w * h * 4);
+
+	for (int y = 0; y < h; y++)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			unsigned char* dest = &texture_data[(y * w + x) * 4];
+
+			// rgba
+			dest[0] = glyph_slot->bitmap.buffer[y * glyph_slot->bitmap.pitch + x];
+			dest[1] = glyph_slot->bitmap.buffer[y * glyph_slot->bitmap.pitch + x];
+			dest[2] = glyph_slot->bitmap.buffer[y * glyph_slot->bitmap.pitch + x];
+			dest[3] = glyph_slot->bitmap.buffer[y * glyph_slot->bitmap.pitch + x];
+
+		}
+	}
+	// Resize Atlas if overflows y
+	if (font->atlas_x + w > font->atlas_w) 
+	{
+		font->atlas_x = 0;
+		font->atlas_y += font->atlas_row_h;
+		font->atlas_row_h = 0;
+	}
+
+	if (font->atlas_y + h > font->atlas_h)
+	{
+		int new_w = font->atlas_w * 2;
+		int new_h = font->atlas_h * 2;
+
+		GLuint new_id;
+
+		// copy and delete original atlas
+		glBindTexture(GL_TEXTURE_2D, font->atlas_id);
+
+		unsigned char* old_texture = (unsigned char*)malloc(font->atlas_w * font->atlas_h * 4);
+		if (old_texture == NULL)
+		{
+			fprintf(stderr, "Memory allocation failed\n");
+			exit(EXIT_FAILURE);
+		}
+
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, old_texture);
+		
+
+		// put old texture into a new one
+		glGenTextures(1, &new_id);
+		glBindTexture(GL_TEXTURE_2D, new_id);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, new_w, new_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, font->atlas_w, font->atlas_h, GL_RGBA, GL_UNSIGNED_BYTE, old_texture);
+		glDeleteTextures(1, &font->atlas_id);
+
+		font->atlas_id = new_id;
+		font->atlas_w = new_w;
+		font->atlas_h = new_h;
+
+		free(old_texture);
+	}
+	
+	glBindTexture(GL_TEXTURE_2D, font->atlas_id);
+	// Put glyph in atlas
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+
+	glTexSubImage2D(GL_TEXTURE_2D,0,font->atlas_x,font->atlas_y,w,h,GL_RGBA,GL_UNSIGNED_BYTE,texture_data);
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	// Transfer attributes from font to glyph
+	glyph.size[0] = glyph_slot->bitmap.width;
+	glyph.size[1] = glyph_slot->bitmap.rows;
+	glyph.bearing[0] = glyph_slot->bitmap_left;
+	glyph.bearing[1] = glyph_slot->bitmap_top;
+	glyph.advance = (glyph_slot->advance.x / 64.0f);
+	glyph.codepoint = glyph_slot->glyph_index;
+
+	glyph.uv0[0] = (float)font->atlas_x / (float)font->atlas_w;
+	glyph.uv0[1] = (float)font->atlas_y / (float)font->atlas_h;
+	glyph.uv1[0] = (float)(font->atlas_x + w)/ (float)font->atlas_w;
+	glyph.uv1[1] = (float)(font->atlas_y  + h)/ (float)font->atlas_h;
+
+	font->atlas_x += w + 1;
+	font->atlas_row_h = (font->atlas_row_h > h) ? font->atlas_row_h : h;
+
+	free(texture_data);
+	return glyph;
+
+}
+
+
+
+void jbgl_draw_text(JbglState* state, const char* text, vec2 pos, JbglFont* font)
+{
+	vec2 draw_pos;
+	draw_pos[0] = pos[0];
+	draw_pos[1] = pos[1];
+	float line_height = font->face->size->metrics.height / 64.0f;
+
+	const char* p = text;
+
+	while (*p)
+	{
+		uint32_t codepoint = utf8_next(&p);
+
+		if (codepoint == '\n')
+		{
+				draw_pos[0] = pos[0];
+				draw_pos[1] += line_height;
+				continue;
+		}
+
+		if (codepoint == '\t')
+		{
+			
+				continue;
+		}
+
+		FT_UInt glyph_index = FT_Get_Char_Index(font->face, codepoint);
+
+		if (!glyph_index)
+			continue;
+
+		JbglGlyph glyph = jbgl_get_glyph_from_cache(state, font, glyph_index);
+		
+
+
+		vec2 render_pos = {
+			draw_pos[0] + glyph.bearing[0],
+			draw_pos[1] - glyph.bearing[1]
+		};
+
+		jbgl_render_glyph(state, font, &glyph, render_pos);
+
+		draw_pos[0] += glyph.advance;
+		
+	}
+
+}
+
+
+uint32_t utf8_next(const char** s)
+{
+	const unsigned char* p = (const unsigned char*)*s;
+	uint32_t cp;
+
+	if (p[0] < 0x80)
+	{
+		cp = p[0];
+		*s += 1;
+	}
+	else if ((p[0] & 0xE0) == 0xC0)
+	{
+		cp = ((p[0] & 0x1F) << 6) |
+			(p[1] & 0x3F);
+		*s += 2;
+	}
+	else if ((p[0] & 0xF0) == 0xE0)
+	{
+		cp = ((p[0] & 0x0F) << 12) |
+			((p[1] & 0x3F) << 6) |
+			(p[2] & 0x3F);
+		*s += 3;
+	}
+	else
+	{
+		cp = ((p[0] & 0x07) << 18) |
+			((p[1] & 0x3F) << 12) |
+			((p[2] & 0x3F) << 6) |
+			(p[3] & 0x3F);
+		*s += 4;
+	}
+
+	return cp;
+}
+
+void jbgl_render_glyph(JbglState* state, JbglFont* font, JbglGlyph* glyph, vec2 pos)
+{
+	vec2 tex_coords[4] = {
+			{glyph->uv0[0], glyph->uv0[1]}, // Bottom-left
+			{glyph->uv1[0], glyph->uv0[1]}, // Bottom-right
+			{glyph->uv1[0], glyph->uv1[1]}, // top-right
+			{glyph->uv0[0], glyph->uv1[1]} // top-left
+	};
+
+	JbglTexture tex = (JbglTexture){
+		.id = font->atlas_id,
+	 .width = glyph->size[0],
+	 .height = glyph->size[1]
+	};
+
+	JbglRectangle rect;
+	rect.w = tex.width;
+	rect.h = tex.height;
+	rect.centre[0] = pos[0];
+	rect.centre[1] = pos[1];
+
+	vec3 pos3;
+	pos3[0] = pos[0];
+	pos3[1] = pos[1];
+	pos3[2] = JBGL_2D_DEPTH;
+
+	int tex_index = jbgl_batch_add_tex(state, tex);
+	JbglRectInstance* instance = jbgl_add_rect_instance(state, rect, tex_index);
+
+	glm_vec2_copy(glyph->uv0, instance->uv0);
+	glm_vec2_copy(glyph->uv1, instance->uv1);
+
+	//jbgl_draw_texture(state, tex, pos3, tex.width, tex.height);
+
+}
+
+
+
+
+
 JbglShader jbgl_init_shader(const char* vs_source, const char* fs_source)
 {
 	GLuint vs_id, fs_id, program_id;
@@ -260,6 +620,13 @@ JbglState* jbgl_init(int screen_w, int screen_h)
 	state->instance_count = 0;
 	state->tex_count = 0;
 
+	
+	if (FT_Init_FreeType(&state->ft))
+	{
+		printf("ERROR::FREETYPE: Could not init FreeType Library\n");
+		return NULL;
+	}
+#
 	jbgl_init_batch_renderer(state);
 
 	return state;
@@ -274,6 +641,7 @@ void jbgl_batch_cleanup(JbglState* state)
 	glDeleteBuffers(1, &state->identity_ebo_id);
 	glDeleteBuffers(1, &state->vbo_id);
 	glDeleteProgram(state->shader.id);
+	FT_Done_FreeType(state->ft);
 	free(state->instances);
 	free(state);
 }
