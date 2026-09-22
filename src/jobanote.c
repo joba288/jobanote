@@ -531,9 +531,31 @@ void delete_selection(Document* doc)
 
 void init_document(Document* doc)
 {
+	if (!doc)
+		return;
+
 	doc->paragraphs = NULL;
+
 	init_paragraph_list(&doc->paragraphs);
 	init_style_dictionary(&doc->dictionary);
+
+	ParagraphNode* paragraph = malloc(sizeof(ParagraphNode));
+
+	if (!paragraph)
+		return;
+
+	paragraph->text = NULL;
+	paragraph->prev = NULL;
+	paragraph->next = NULL;
+
+	doc->paragraphs = paragraph;
+
+	doc->cursor.paragraph_node = paragraph;
+	doc->cursor.text_node = NULL;
+	doc->cursor.character = 0;
+
+	doc->selection_start = doc->cursor;
+	doc->selecting = false;
 }
 
 void free_document(Document* doc)
