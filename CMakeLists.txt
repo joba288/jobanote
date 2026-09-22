@@ -9,7 +9,7 @@ add_executable(${PROJECT_NAME}
 "src/main.c"
     "src/jobanote.c"
     src/jbgl.c
- )
+  "src/odt.c"  "src/odt_styles.c" "src/document_renderer.c")
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE
@@ -43,7 +43,7 @@ find_package(OpenGL REQUIRED)
 
 add_library(glad STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/glad/src/gl.c
-)
+ )
 
 target_include_directories(glad PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/glad/include
@@ -68,7 +68,7 @@ target_include_directories(nfd PUBLIC
     vendor/nativefiledialog/src/include
 )
 
-add_library(miniz vendor/miniz/miniz.c )
+add_library(miniz vendor/miniz/miniz.c  )
 
 target_include_directories(miniz PUBLIC
     vendor/miniz

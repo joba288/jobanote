@@ -11,12 +11,12 @@ uniform sampler2D textures[32];
 void main()
 {
     vec4 col = Colour;
-    if (TexIndex >= 0)
+    if (TexIndex > 0)
     {
         int i = clamp(TexIndex, 0, 31);
-        col = texture(textures[TexIndex], TexCoord);
+        col = texture(textures[i], TexCoord) * Colour;
     }
-
+    
     //FragColor = vec4(1,0,0,1);
     FragColor = col;
 }
