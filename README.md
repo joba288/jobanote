@@ -86,6 +86,23 @@ The project currently loads a test document from:
 resources/documents/test.odt
 ```
 
+## Testing
+
+Includes automated tests for the core document and text-editing functionality.
+The tests use a small custom test framework.
+
+### Building the Tests
+
+The tests are built automatically by CMake
+
+### Running the Tests
+
+Run the complete test suite with:
+
+```
+ctest --test-dir build --output-on-failure
+```
+
 ## Still to Add
 This project is still work in progress. Features still to be added include:
 - A complete GUI
@@ -94,3 +111,4 @@ This project is still work in progress. Features still to be added include:
 - Undo / Redo
 - Fix problems with word wrapping
 - Searching for fonts based on fontname in style
+- Fix bugs brought to light by testing
