@@ -106,8 +106,8 @@ void render_document(Document* doc, JbglState* state, JbglFont* font, JbglFont* 
 			vec4 colour;
 			hex_to_vec4(text->resolved_style->colour, colour);
 
-			//JbglTextInfo text_info = jbgl_draw_text_animated(state, text->data, (vec2) { x, pos[1] }, font, true, colour, text->resolved_style->bold, text->resolved_style->italic, text->resolved_style->underline, text->resolved_style->strikethrough, glfwGetTime());
-			JbglTextInfo text_info = jbgl_draw_text(state, text->data, (vec2) { x, pos[1] }, font, true, colour, text->resolved_style->bold, text->resolved_style->italic, text->resolved_style->underline, text->resolved_style->strikethrough);
+			JbglTextInfo text_info = jbgl_draw_text_animated(state, text->data, (vec2) { x, pos[1] }, font, true, colour, text->resolved_style->bold, text->resolved_style->italic, text->resolved_style->underline, text->resolved_style->strikethrough, glfwGetTime());
+			//JbglTextInfo text_info = jbgl_draw_text(state, text->data, (vec2) { x, pos[1] }, font, true, colour, text->resolved_style->bold, text->resolved_style->italic, text->resolved_style->underline, text->resolved_style->strikethrough);
 
 			draw_cursor(doc, text, x, pos[1], state, font, cursor_texture);
 
