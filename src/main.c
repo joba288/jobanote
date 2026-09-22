@@ -17,6 +17,7 @@ typedef struct
 {
 	JbglState* state;
 	JbglFont* font;
+	JbglFont* toolbar_font;
 	JbglTexture cursor_texture;
 
 	Document doc;
@@ -91,6 +92,7 @@ void on_init()
 	// TODO Asset Manager
 	app.cursor_texture = jbgl_load_texture("resources/textures/southey.jpg");
 	app.font = jbgl_load_font(app.state, "resources/fonts/arial.ttf", 42);
+	app.toolbar_font = jbgl_load_font(app.state, "resources/fonts/arial.ttf", 25);
 
 	// XML
 	app.doc = *run_program();
@@ -107,8 +109,8 @@ void on_render()
 {
 	jbgl_begin_batch(app.state);
 
-		jbgl_draw_rect(app.state, (vec3) { 0.0f, 0.0f, 0.0f }, 64, app.state->screen_h, (vec4) { 0.105f, 0.22f, 0.34f, 1.0f });
-		render_document(&app.doc, app.state, app.font, app.cursor_texture, app.scroll_y);
+		
+		render_document(&app.doc, app.state, app.font, app.toolbar_font, app.cursor_texture, app.scroll_y);
 	
 	jbgl_end_batch(app.state);
 }

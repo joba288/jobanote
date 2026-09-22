@@ -17,8 +17,46 @@ static void draw_cursor(Document* doc, TextNode* text, float x, float y, JbglSta
 	jbgl_draw_texture(state, cursor_texture, (vec3) { cursor_x, y - (size[1] * 0.85f), JBGL_2D_DEPTH }, 4, cursor_height, (vec4) { 1.0f, 1.0f, 1.0f, 1.0f });
 }
 
-void render_document(Document* doc, JbglState* state, JbglFont* font, JbglTexture cursor_texture, float scroll_y)
+static void render_toolbar(Document* doc,JbglState* state,JbglFont* font,int screen_width)
 {
+	const float toolbar_height = 36.0f;
+
+	// Toolbar background
+	jbgl_draw_rect(state,(vec3) {0.0f, 0.0f, JBGL_2D_DEPTH},screen_width,(int)toolbar_height, (vec4) { 0.105f, 0.22f, 0.34f, 1.0f });
+
+	// Application name
+	jbgl_draw_text(state,"jobanote",(vec2) {15.0f, 25.0f},font,false,(vec4) {1.0f, 1.0f, 1.0f, 1.0f},true,false, false,false);
+
+	// Current span information 
+	TextNode* text = doc->cursor.text_node;
+
+	if (text && text->resolved_style)
+	{
+		char span_info[256];
+
+		snprintf(
+			span_info,
+			sizeof(span_info),
+			"Bold: %s   Italic: %s   Underline: %s   Strikethrough: %s",
+			text->resolved_style->bold ? "On" : "Off",
+			text->resolved_style->italic ? "On" : "Off",
+			text->resolved_style->underline ? "On" : "Off",
+			text->resolved_style->strikethrough ? "On" : "Off"
+		);
+
+		jbgl_draw_text(state,span_info,(vec2) {420.0f, 25.0f},font,false,(vec4) {1.0f, 1.0f, 1.0f, 1.0f},false,false,false,false);
+	}
+	else
+	{
+		jbgl_draw_text(state,"No span",(vec2) {320.0f, 25.0f},font,false,(vec4) {0.7f, 0.7f, 0.7f, 1.0f},false,false,false,false);
+	}
+}
+
+void render_document(Document* doc, JbglState* state, JbglFont* font, JbglFont* toolbar_font, JbglTexture cursor_texture, float scroll_y)
+{
+	// sidebar
+	jbgl_draw_rect(state, (vec3) { 0.0f, 0.0f, 0.0f }, 64, state->screen_h, (vec4) { 0.105f, 0.22f, 0.34f, 1.0f });
+	
 	Cursor start;
 	Cursor end;
 
@@ -33,10 +71,17 @@ void render_document(Document* doc, JbglState* state, JbglFont* font, JbglTextur
 		end = doc->selection_start;
 	}
 
-	vec2 pos = { 10.0f, 48.0f + scroll_y };
+	const float toolbar_height = 70.0f;
+	const float document_margin = 20.0f;
+
+	vec2 pos = {
+		document_margin,
+		toolbar_height + document_margin + scroll_y
+	};
 	float line_height = font->face->size->metrics.height / 64.0f;
 
 	ParagraphNode* paragraph = doc->paragraphs;
+	
 	int paragraph_count = 1;
 
 	while (paragraph)
@@ -61,7 +106,8 @@ void render_document(Document* doc, JbglState* state, JbglFont* font, JbglTextur
 			vec4 colour;
 			hex_to_vec4(text->resolved_style->colour, colour);
 
-			JbglTextInfo text_info = jbgl_draw_text_animated(state, text->data, (vec2) { x, pos[1] }, font, true, colour, text->resolved_style->bold, text->resolved_style->italic, text->resolved_style->underline, text->resolved_style->strikethrough, glfwGetTime());
+			//JbglTextInfo text_info = jbgl_draw_text_animated(state, text->data, (vec2) { x, pos[1] }, font, true, colour, text->resolved_style->bold, text->resolved_style->italic, text->resolved_style->underline, text->resolved_style->strikethrough, glfwGetTime());
+			JbglTextInfo text_info = jbgl_draw_text(state, text->data, (vec2) { x, pos[1] }, font, true, colour, text->resolved_style->bold, text->resolved_style->italic, text->resolved_style->underline, text->resolved_style->strikethrough);
 
 			draw_cursor(doc, text, x, pos[1], state, font, cursor_texture);
 
@@ -75,6 +121,10 @@ void render_document(Document* doc, JbglState* state, JbglFont* font, JbglTextur
 		paragraph = paragraph->next;
 		paragraph_count++;
 	}
+
+	render_toolbar(doc, state, toolbar_font, state->screen_w);
+
+
 }
 
 void draw_selection(Document* doc, Cursor start, Cursor end, TextNode* text, float x, float y, JbglState* state, JbglFont* font)
