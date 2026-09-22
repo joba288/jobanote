@@ -17,15 +17,15 @@ static void draw_cursor(Document* doc, TextNode* text, float x, float y, JbglSta
 	jbgl_draw_texture(state, cursor_texture, (vec3) { cursor_x, y - (size[1] * 0.85f), JBGL_2D_DEPTH }, 4, cursor_height, (vec4) { 1.0f, 1.0f, 1.0f, 1.0f });
 }
 
-static void render_toolbar(Document* doc,JbglState* state,JbglFont* font,int screen_width)
+static void render_toolbar(Document* doc, JbglState* state, JbglFont* font, int screen_width)
 {
 	const float toolbar_height = 36.0f;
 
 	// Toolbar background
-	jbgl_draw_rect(state,(vec3) {0.0f, 0.0f, JBGL_2D_DEPTH},screen_width,(int)toolbar_height, (vec4) { 0.105f, 0.22f, 0.34f, 1.0f });
+	jbgl_draw_rect(state, (vec3) { 0.0f, 0.0f, JBGL_2D_DEPTH }, screen_width, (int)toolbar_height, (vec4) { 0.105f, 0.22f, 0.34f, 1.0f });
 
 	// Application name
-	jbgl_draw_text(state,"jobanote",(vec2) {15.0f, 25.0f},font,false,(vec4) {1.0f, 1.0f, 1.0f, 1.0f},true,false, false,false);
+	jbgl_draw_text(state, "jobanote", (vec2) { 15.0f, 25.0f }, font, false, (vec4) { 1.0f, 1.0f, 1.0f, 1.0f }, true, false, false, false);
 
 	// Current span information 
 	TextNode* text = doc->cursor.text_node;
@@ -44,11 +44,11 @@ static void render_toolbar(Document* doc,JbglState* state,JbglFont* font,int scr
 			text->resolved_style->strikethrough ? "On" : "Off"
 		);
 
-		jbgl_draw_text(state,span_info,(vec2) {420.0f, 25.0f},font,false,(vec4) {1.0f, 1.0f, 1.0f, 1.0f},false,false,false,false);
+		jbgl_draw_text(state, span_info, (vec2) { 420.0f, 25.0f }, font, false, (vec4) { 1.0f, 1.0f, 1.0f, 1.0f }, false, false, false, false);
 	}
 	else
 	{
-		jbgl_draw_text(state,"No span",(vec2) {320.0f, 25.0f},font,false,(vec4) {0.7f, 0.7f, 0.7f, 1.0f},false,false,false,false);
+		jbgl_draw_text(state, "No span", (vec2) { 320.0f, 25.0f }, font, false, (vec4) { 0.7f, 0.7f, 0.7f, 1.0f }, false, false, false, false);
 	}
 }
 
@@ -56,7 +56,7 @@ void render_document(Document* doc, JbglState* state, JbglFont* font, JbglFont* 
 {
 	// sidebar
 	jbgl_draw_rect(state, (vec3) { 0.0f, 0.0f, 0.0f }, 64, state->screen_h, (vec4) { 0.105f, 0.22f, 0.34f, 1.0f });
-	
+
 	Cursor start;
 	Cursor end;
 
@@ -81,7 +81,7 @@ void render_document(Document* doc, JbglState* state, JbglFont* font, JbglFont* 
 	float line_height = font->face->size->metrics.height / 64.0f;
 
 	ParagraphNode* paragraph = doc->paragraphs;
-	
+
 	int paragraph_count = 1;
 
 	while (paragraph)

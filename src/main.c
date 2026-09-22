@@ -61,13 +61,13 @@ int main(void)
 	{
 		glClearColor(0.071f, 0.165f, 0.263, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
-		
+
 
 		// Update
 		on_update();
 		// Render
 		on_render();
-		
+
 		// --
 		glfwPollEvents();
 		glfwSwapBuffers(window);
@@ -77,7 +77,7 @@ int main(void)
 
 	glfwDestroyWindow(window);
 	glfwTerminate();
-	
+
 	return 0;
 }
 
@@ -109,9 +109,9 @@ void on_render()
 {
 	jbgl_begin_batch(app.state);
 
-		
-		render_document(&app.doc, app.state, app.font, app.toolbar_font, app.cursor_texture, app.scroll_y);
-	
+
+	render_document(&app.doc, app.state, app.font, app.toolbar_font, app.cursor_texture, app.scroll_y);
+
 	jbgl_end_batch(app.state);
 }
 
@@ -139,10 +139,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-	app.scroll_y += (float)yoffset * 30.0f;   
+	app.scroll_y += (float)yoffset * 30.0f;
 
 	if (app.scroll_y > 0.0f)
-		app.scroll_y = 0.0f;                 
+		app.scroll_y = 0.0f;
 }
 
 void character_callback(GLFWwindow* window, unsigned int codepoint)
@@ -164,7 +164,7 @@ void debug_document(Document* doc)
 
 	while (paragraph)
 	{
-		printf("\nParagraph %d: %p\n",p,(void*)paragraph);
+		printf("\nParagraph %d: %p\n", p, (void*)paragraph);
 
 		printf(
 			"  prev = %p\n"
@@ -263,12 +263,12 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 		}
 	}
 
-	if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) 
+	if (key == GLFW_KEY_ENTER && action == GLFW_PRESS)
 	{
 		if (has_selection(&app.doc))
 		{
 			delete_selection(&app.doc);
-		} 
+		}
 		insert_paragraph_node_at_cursor(&app.doc);
 	}
 
