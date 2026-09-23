@@ -17,6 +17,10 @@ jobanote is a lightweight ODT document editor built from the ground up in C.  Fo
 - XML parsing and generation using libxml2
 - ZIP archive handling using miniz
 
+## Example
+
+![](https://github.com/joba288/jobanote/blob/main/jobanote_example_img.PNG)
+
 ## Project Structure
 ```text
 jobanote/
